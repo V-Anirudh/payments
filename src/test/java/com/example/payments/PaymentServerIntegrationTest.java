@@ -108,4 +108,12 @@ class PaymentServerIntegrationTest {
         assertEquals(200, retry.statusCode());
         assertEquals("{\"currency\":\"DDD\",\"amount\":100.00}", retry.body());
     }
+
+    @Test
+    void reusingIdempotencyKeyWithDifferentAmountReturns409() throws Exception {
+        post("/payments/EEE/100", "key-2");
+        HttpResponse<String> conflict = post("/payments/EEE/200", "key-2");
+        assertEquals(409, conflict.statusCode());
+        assertTrue(conflict.body().contains("\"error\""));
+    }
 }

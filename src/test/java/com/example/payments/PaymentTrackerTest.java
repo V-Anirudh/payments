@@ -12,6 +12,7 @@ import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PaymentTrackerTest {
@@ -69,6 +70,32 @@ class PaymentTrackerTest {
         tracker.record("USD", new BigDecimal("100"), null);
         tracker.record("USD", new BigDecimal("100"), null);
         assertEquals(0, tracker.balance("USD").orElseThrow().compareTo(new BigDecimal("200")));
+    }
+
+    @Test
+    void sameIdempotencyKeyWithDifferentAmountThrows() {
+        PaymentTracker tracker = new PaymentTracker();
+        tracker.record("USD", new BigDecimal("100"), "req-1");
+        assertThrows(IdempotencyConflictException.class,
+                () -> tracker.record("USD", new BigDecimal("200"), "req-1"));
+        // the conflicting retry must not have been applied
+        assertEquals(0, tracker.balance("USD").orElseThrow().compareTo(new BigDecimal("100")));
+    }
+
+    @Test
+    void sameIdempotencyKeyWithDifferentCurrencyThrows() {
+        PaymentTracker tracker = new PaymentTracker();
+        tracker.record("USD", new BigDecimal("100"), "req-1");
+        assertThrows(IdempotencyConflictException.class,
+                () -> tracker.record("EUR", new BigDecimal("100"), "req-1"));
+    }
+
+    @Test
+    void sameIdempotencyKeyWithEquivalentButDifferentlyScaledAmountDoesNotThrow() {
+        PaymentTracker tracker = new PaymentTracker();
+        tracker.record("USD", new BigDecimal("100"), "req-1");
+        BigDecimal result = tracker.record("USD", new BigDecimal("100.00"), "req-1");
+        assertEquals(0, result.compareTo(new BigDecimal("100")));
     }
 
     @Test

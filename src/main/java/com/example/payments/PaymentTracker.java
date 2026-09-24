@@ -15,9 +15,14 @@ public final class PaymentTracker {
 
     private final ConcurrentHashMap<String, BigDecimal> balances = new ConcurrentHashMap<>();
 
-    // Idempotency-Key -> the balance that request produced. A retried request
-    // with the same key returns the stored result instead of re-applying the amount.
-    private final ConcurrentHashMap<String, BigDecimal> idempotencyResults = new ConcurrentHashMap<>();
+    // Idempotency-Key -> the request that first claimed it, plus the balance
+    // it produced. A retried request with the same key and the same
+    // currency/amount returns the stored balance instead of re-applying it;
+    // the same key reused with different parameters is a conflict.
+    private final ConcurrentHashMap<String, IdempotentRequest> idempotencyResults = new ConcurrentHashMap<>();
+
+    private record IdempotentRequest(String currency, BigDecimal amount, BigDecimal balance) {
+    }
 
     public BigDecimal record(String currency, BigDecimal amount) {
         return record(currency, amount, null);
@@ -29,8 +34,14 @@ public final class PaymentTracker {
         }
         // computeIfAbsent holds the bin lock for this key, so a concurrent
         // duplicate of the same request can't apply the merge twice.
-        return idempotencyResults.computeIfAbsent(idempotencyKey,
-                k -> balances.merge(currency, amount, BigDecimal::add));
+        IdempotentRequest first = idempotencyResults.computeIfAbsent(idempotencyKey,
+                k -> new IdempotentRequest(currency, amount, balances.merge(currency, amount, BigDecimal::add)));
+
+        boolean sameRequest = first.currency().equals(currency) && first.amount().compareTo(amount) == 0;
+        if (!sameRequest) {
+            throw new IdempotencyConflictException(idempotencyKey);
+        }
+        return first.balance();
     }
 
     // Empty if we've never seen the currency. One that nets back to zero is

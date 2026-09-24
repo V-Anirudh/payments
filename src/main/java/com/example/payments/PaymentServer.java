@@ -36,7 +36,13 @@ final class PaymentServer {
                         return;
                     }
                     String idempotencyKey = req.headers().get("Idempotency-Key");
-                    BigDecimal balance = tracker.record(currency, amount, idempotencyKey);
+                    BigDecimal balance;
+                    try {
+                        balance = tracker.record(currency, amount, idempotencyKey);
+                    } catch (IdempotencyConflictException e) {
+                        json(resp, 409, Json.error(e.getMessage()));
+                        return;
+                    }
                     json(resp, 200, Json.balance(currency, money(balance)));
                 })
                 .addHandler(Method.GET, "/payments/{currency}", (req, resp, pathParams) -> {
