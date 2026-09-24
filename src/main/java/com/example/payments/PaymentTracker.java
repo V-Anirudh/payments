@@ -15,8 +15,22 @@ public final class PaymentTracker {
 
     private final ConcurrentHashMap<String, BigDecimal> balances = new ConcurrentHashMap<>();
 
+    // Idempotency-Key -> the balance that request produced. A retried request
+    // with the same key returns the stored result instead of re-applying the amount.
+    private final ConcurrentHashMap<String, BigDecimal> idempotencyResults = new ConcurrentHashMap<>();
+
     public BigDecimal record(String currency, BigDecimal amount) {
-        return balances.merge(currency, amount, BigDecimal::add);
+        return record(currency, amount, null);
+    }
+
+    public BigDecimal record(String currency, BigDecimal amount, String idempotencyKey) {
+        if (idempotencyKey == null) {
+            return balances.merge(currency, amount, BigDecimal::add);
+        }
+        // computeIfAbsent holds the bin lock for this key, so a concurrent
+        // duplicate of the same request can't apply the merge twice.
+        return idempotencyResults.computeIfAbsent(idempotencyKey,
+                k -> balances.merge(currency, amount, BigDecimal::add));
     }
 
     // Empty if we've never seen the currency. One that nets back to zero is

@@ -35,7 +35,9 @@ final class PaymentServer {
                         json(resp, 400, Json.error("amount is not a number: " + pathParams.get("amount")));
                         return;
                     }
-                    json(resp, 200, Json.balance(currency, money(tracker.record(currency, amount))));
+                    String idempotencyKey = req.headers().get("Idempotency-Key");
+                    BigDecimal balance = tracker.record(currency, amount, idempotencyKey);
+                    json(resp, 200, Json.balance(currency, money(balance)));
                 })
                 .addHandler(Method.GET, "/payments/{currency}", (req, resp, pathParams) -> {
                     var currency = pathParams.get("currency");

@@ -44,6 +44,14 @@ class PaymentServerIntegrationTest {
         return client.send(req, HttpResponse.BodyHandlers.ofString());
     }
 
+    private HttpResponse<String> post(String path, String idempotencyKey) throws Exception {
+        HttpRequest req = HttpRequest.newBuilder(base.resolve(path))
+                .header("Idempotency-Key", idempotencyKey)
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+        return client.send(req, HttpResponse.BodyHandlers.ofString());
+    }
+
     private HttpResponse<String> get(String path) throws Exception {
         HttpRequest req = HttpRequest.newBuilder(base.resolve(path)).GET().build();
         return client.send(req, HttpResponse.BodyHandlers.ofString());
@@ -91,5 +99,13 @@ class PaymentServerIntegrationTest {
         HttpResponse<String> resp = post("/payments/USD/abc");
         assertEquals(400, resp.statusCode());
         assertTrue(resp.body().contains("\"error\""));
+    }
+
+    @Test
+    void retryWithSameIdempotencyKeyIsAppliedOnce() throws Exception {
+        post("/payments/DDD/100", "key-1");
+        HttpResponse<String> retry = post("/payments/DDD/100", "key-1");
+        assertEquals(200, retry.statusCode());
+        assertEquals("{\"currency\":\"DDD\",\"amount\":100.00}", retry.body());
     }
 }

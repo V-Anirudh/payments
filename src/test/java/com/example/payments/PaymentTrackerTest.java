@@ -48,6 +48,30 @@ class PaymentTrackerTest {
     }
 
     @Test
+    void duplicateIdempotencyKeyIsAppliedOnce() {
+        PaymentTracker tracker = new PaymentTracker();
+        tracker.record("USD", new BigDecimal("100"), "req-1");
+        tracker.record("USD", new BigDecimal("100"), "req-1"); // simulated client retry
+        assertEquals(0, tracker.balance("USD").orElseThrow().compareTo(new BigDecimal("100")));
+    }
+
+    @Test
+    void differentIdempotencyKeysBothApply() {
+        PaymentTracker tracker = new PaymentTracker();
+        tracker.record("USD", new BigDecimal("100"), "req-1");
+        tracker.record("USD", new BigDecimal("100"), "req-2");
+        assertEquals(0, tracker.balance("USD").orElseThrow().compareTo(new BigDecimal("200")));
+    }
+
+    @Test
+    void nullIdempotencyKeyAlwaysApplies() {
+        PaymentTracker tracker = new PaymentTracker();
+        tracker.record("USD", new BigDecimal("100"), null);
+        tracker.record("USD", new BigDecimal("100"), null);
+        assertEquals(0, tracker.balance("USD").orElseThrow().compareTo(new BigDecimal("200")));
+    }
+
+    @Test
     void snapshotIsSortedByCurrency() {
         PaymentTracker tracker = new PaymentTracker();
         tracker.record("USD", BigDecimal.ONE);
